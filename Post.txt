@@ -1,0 +1,260 @@
+Voltando no tempo: como eu aprendi a fazer CRUDs com DAL e BLL(ou: Como você não deve fazer CRUDS hoje em dia).
+
+Hoje me perguntaram se tenho um artigo falando sobre BLL e DAL com ADO.NET puro. E não, eu não tenho.
+
+E isso me fez pensar em como eu mudei minha forma de escrever software ao longo dos anos. Decidi então perder 40 minutos da minha vida e fazer um CRUD simples como eu faria há uns 8 anos atrás.
+
+A ideia aqui não é discutir se é bom ou ruim desenvolver desta forma. Somente fiz um CRUD da maneira mais cru possível: sem ORM, sem injeção de dependencia, sem tratar exception, sem nada. Também não fiz nada de mais na parte visual, pois o foco aqui é código.
+
+Você que é iniciante e está lendo isso, talvez tenha aprendido da maneira que vou colocar aqui, talvez não. 
+Mas o fato é hoje em dia há várias formas de se fazer isso melhor. Pretendo escrever mais posts sobre o assunto mostrando essas formas, fique ligado!
+
+E como eu disse, a ideia não é criticar nem julgar! 
+Esse tipo de código já colocou pão na minha mesa e resolveu problemas de muitos clientes (:
+
+Se gostarem desse post, posso ir melhorando o código dessa aplicação junto com vocês e vamos estudando as coisas aos poucos, beleza?
+
+Apesar de haver outras maneiras, esse post pode ser até educacional pra você que nunca fez assim. Já fiz entrevistas de emprego onde tive que acessar banco usando ADO.NET, e nessas horas esse conhecimento veio a calhar.
+
+Gostaria muito de ouvir a sua opinião no fim do post sobre porque essa arquitetura é boa/ruim e qual você prefere e porque (:
+
+Fiz uma aplicação MVC que cadastra um usuário, altera, exclui e busca.
+
+O modelo
+
+public class Usuario  
+{
+    public int Id { get; set; }
+    public string Nome { get; set; }
+    public string Email { get; set; }
+}
+O Controller:
+
+public class ProdutoController : Controller  
+{
+    public ActionResult Index()
+    {
+        BLLProduto bll = new BLLProduto();
+        List<Produto> produtos = bll.Lista();
+        return View(produtos);
+    }
+
+    public ActionResult Form()
+    {
+        return View();
+    }
+
+    public ActionResult Adiciona(Produto usuario)
+    {
+        BLLProduto bll = new BLLProduto();
+        bll.Adiciona(usuario);
+        return RedirectToAction("index");
+    }
+
+    public ActionResult Edita(int id)
+    {
+        BLLProduto bll = new BLLProduto();
+        Produto produto = bll.BuscaPorId(id);
+
+        return View(produto);
+    }
+
+    public ActionResult Altera(Produto usuario)
+    {
+        BLLProduto bll = new BLLProduto();
+        bll.Altera(usuario);
+        return RedirectToAction("index");
+    }
+
+    public ActionResult Exclui(int id)
+    {
+        BLLProduto bll = new BLLProduto();
+        bll.Exclui(id);
+
+        return RedirectToAction("index");
+    }
+}
+A BLL(onde supostamente ficariam as regras de negócio):
+
+public class BLLProduto  
+{
+
+    public void Adiciona(Produto produto)
+    {
+        //aqui ficaria alguma validação de regra de negócio
+        ProdutoDAO dao = new ProdutoDAO();
+
+        dao.Adiciona(produto);
+    }
+
+    public Produto BuscaPorId(int id)
+    {
+        ProdutoDAO dao = new ProdutoDAO();
+
+        Produto produto = dao.BuscaPorId(id);
+
+        return produto;
+    }
+
+    public void Altera(Produto produto)
+    {
+        //aqui ficaria alguma validação de regra de negócio
+        ProdutoDAO dao = new ProdutoDAO();
+
+        dao.Altera(produto);
+    }
+
+    public List<Produto> Lista()
+    {
+        ProdutoDAO dao = new ProdutoDAO();
+
+        List<Produto> lista = dao.Lista();
+
+        return lista;
+    }
+
+    public void Exclui(int id)
+    {
+        ProdutoDAO dao = new ProdutoDAO();
+
+        dao.Exclui(id);
+    }
+}
+O DAO:
+
+public class ProdutoDAO  
+{
+    private string connectionstring = ConfigurationManager.ConnectionStrings["banco"].ConnectionString;
+
+    public void Adiciona(Produto produto)
+    {
+        using (IDbConnection conexao = new SqlConnection(connectionstring))
+        using (IDbCommand comando = conexao.CreateCommand())
+        {
+            comando.CommandText = "insert into produto (nome, descricao) values (@nome, @descricao)";
+
+            IDbDataParameter paramNome = comando.CreateParameter();
+            paramNome.ParameterName = "nome";
+            paramNome.Value = produto.Nome;
+
+            IDbDataParameter paramDescricao = comando.CreateParameter();
+            paramDescricao.ParameterName = "descricao";
+            paramDescricao.Value = produto.Descricao;
+
+            comando.Parameters.Add(paramNome);
+            comando.Parameters.Add(paramDescricao);
+
+            conexao.Open();
+            comando.ExecuteNonQuery();
+        }
+    }
+
+    public Produto BuscaPorId(int id)
+    {
+        using (IDbConnection conexao = new SqlConnection(connectionstring))
+        using (IDbCommand comando = conexao.CreateCommand())
+        {
+            comando.CommandText = "select * from produto where id = @id";
+
+            IDbDataParameter paramId = comando.CreateParameter();
+            paramId.ParameterName = "id";
+            paramId.Value = id;
+
+            comando.Parameters.Add(paramId);
+
+            conexao.Open();
+            IDataReader dr = comando.ExecuteReader();
+
+            Produto produto = null;
+            if (dr.Read())
+            {
+                produto = new Produto();
+                produto.Id = Convert.ToInt32(dr["id"]);
+                produto.Nome = dr["nome"].ToString();
+                produto.Descricao = dr["descricao"].ToString();
+            }
+
+            return produto;
+        }
+    }
+
+    public void Altera(Produto produto)
+    {
+        using (IDbConnection conexao = new SqlConnection(connectionstring))
+        using (IDbCommand comando = conexao.CreateCommand())
+        {
+            comando.CommandText = "update produto set nome = @nome, descricao = @descricao where id = @id";
+
+            IDbDataParameter paramId = comando.CreateParameter();
+            paramId.ParameterName = "id";
+            paramId.Value = produto.Id;
+
+            IDbDataParameter paramNome = comando.CreateParameter();
+            paramNome.ParameterName = "nome";
+            paramNome.Value = produto.Nome;
+
+            IDbDataParameter paramDescricao = comando.CreateParameter();
+            paramDescricao.ParameterName = "descricao";
+            paramDescricao.Value = produto.Descricao;
+
+            comando.Parameters.Add(paramId);
+            comando.Parameters.Add(paramNome);
+            comando.Parameters.Add(paramDescricao);
+
+            conexao.Open();
+            comando.ExecuteNonQuery();
+        }
+    }
+
+    public List<Produto> Lista()
+    {
+        using (IDbConnection conexao = new SqlConnection(connectionstring))
+        using (IDbCommand comando = conexao.CreateCommand())
+        {
+            comando.CommandText = "select * from produto";
+
+            conexao.Open();
+            IDataReader dr = comando.ExecuteReader();
+
+            List<Produto> lista = new List<Produto>();
+            while (dr.Read())
+            {
+                Produto produto = new Produto();
+                produto = new Produto();
+                produto.Id = Convert.ToInt32(dr["id"]);
+                produto.Nome = dr["nome"].ToString();
+                produto.Descricao = dr["descricao"].ToString();
+
+                lista.Add(produto);
+            }
+
+            return lista;
+        }
+    }
+
+    public void Exclui(int id)
+    {
+        using (IDbConnection conexao = new SqlConnection(connectionstring))
+        using (IDbCommand comando = conexao.CreateCommand())
+        {
+            comando.CommandText = "delete from produto where id = @id";
+
+            IDbDataParameter paramId = comando.CreateParameter();
+            paramId.ParameterName = "id";
+            paramId.Value = id;
+
+            comando.Parameters.Add(paramId);
+
+            conexao.Open();
+            comando.ExecuteNonQuery();
+        }
+    }
+}
+Coloquei esse projeto no Github, baixa ele lá se quiser https://github.com/gabsferreira/CrudSimples
+
+Não sabe usar Github? 
+Aqui ensino a instalar e a configurar e aqui a copiar e baixar projetos.
+(você também pode só clicar no botão Download ZIP na página do projeto)
+
+E você, fazia/faz CRUDs assim também? O que acha dessa forma de fazer? Aprendeu de um jeito diferente? 
+Comenta aí (:
